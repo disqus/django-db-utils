@@ -54,5 +54,5 @@ For efficiency use ``RangeQuerySetWrapper``.
 
     from dbutils.querysets import IterableQuerySetWrapper
     
-    for foo in IterableQuerySetWrapper(Model):
+    for foo in IterableQuerySetWrapper(Model.objects.all()):
         print foo

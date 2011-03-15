@@ -13,6 +13,21 @@ Shortcut method which handles a pythonic LEFT OUTER JOIN.
     
     attach_foreignkey(qs, Model.author)
 
+queryset_to_dict
+================
+
+Shortcut method which stores a group of results as a dictionary
+by the key you specify (or primary key by default).
+
+::
+
+    from dbutils.helpers import queryset_to_dict
+    
+    qs = Model.objects.all()
+    
+    queryset_to_dict(qs, 'author_id')
+
+
 SkinnyQuerySet
 ==============
 

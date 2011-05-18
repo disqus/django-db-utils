@@ -3,7 +3,7 @@ from django.db.models.query import QuerySet
 from django.db.models.fields import AutoField, IntegerField
 from django.db.models import Min, Max
 
-from queryutils.helpers import attach_foreignkey
+from dbutils.helpers import attach_foreignkey
 
 class QuerySetDoubleIteration(Exception):
     "A QuerySet was iterated over twice, you probably want to list() it."

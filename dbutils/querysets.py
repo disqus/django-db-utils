@@ -75,6 +75,7 @@ class IterableQuerySetWrapper(object):
         return iter(self)
 
 
+
 class RangeQuerySet(SkinnyQuerySet):
     """
     See ``RangeQuerySetWrapper``
@@ -102,29 +103,36 @@ class RangeQuerySet(SkinnyQuerySet):
 
 class RangeQuerySetWrapper(object):
     """
-    Iterates through a result set using MIN/MAX on primary key and stepping through.
+    Iterates through a queryset by chunking results by ``step`` and using GREATER THAN
+    and LESS THAN queries on the primary key.
 
     Very efficient, but ORDER BY statements will not work.
     """
 
-    def __init__(self, queryset, step=10000, limit=None, min_id=None, max_id=None, sorted=False, select_related=[]):
+    def __init__(self, queryset, step=1000, limit=None, min_id=None, max_id=None, sorted=True,
+                 select_related=[], callbacks=[]):
         # Support for slicing
         if queryset.query.low_mark == 0 and not\
           (queryset.query.order_by or queryset.query.extra_order_by):
-            limit = queryset.query.high_mark
+            if limit is None:
+                limit = queryset.query.high_mark
             queryset.query.clear_limits()
         else:
             raise InvalidQuerySetError
 
         self.limit = limit
         if limit:
-            self.step = min(limit, step)
+            self.step = min(limit, abs(step))
+            self.desc = step < 0
         else:
-            self.step = step
+            self.step = abs(step)
+            self.desc = step < 0
         self.queryset = queryset
         self.min_id, self.max_id = min_id, max_id
-        self.sorted = sorted
+        # if max_id isnt set we sort by default for optimization
+        self.sorted = sorted or not max_id
         self.select_related = select_related
+        self.callbacks = callbacks
 
     def __iter__(self):
         pk = self.queryset.model._meta.pk
@@ -132,18 +140,13 @@ class RangeQuerySetWrapper(object):
             for result in iter(IterableQuerySetWrapper(self.queryset, self.step, self.limit)):
                 yield result
         else:
-            if self.min_id is not None and self.max_id is not None:
-                at, max_id = self.min_id, self.max_id
+            max_id = self.max_id
+            if self.min_id is not None:
+                at = self.min_id
+            elif not self.sorted:
+                at = 0
             else:
-                at = self.queryset.aggregate(Min('pk'), Max('pk'))
-                max_id, at = at['pk__max'], at['pk__min']
-                if self.min_id:
-                    at = self.min_id
-                if self.max_id:
-                    max_id = self.max_id
-
-            if not (at and max_id):
-                return
+                at = None
 
             num = 0
             limit = self.limit or max_id
@@ -153,11 +156,28 @@ class RangeQuerySetWrapper(object):
             else:
                 extra_kwargs = {}
 
-            while at <= max_id and (not self.limit or num < self.limit):
-                results = self.queryset.filter(id__gte=at, id__lte=min((at + self.step - 1), max_id))
+            has_results = True
+            while ((max_id and at <= max_id) or has_results) and (not self.limit or num < self.limit):
+                start = num
+
+                if at is None:
+                    results = self.queryset
+                elif self.desc:
+                    results = self.queryset.filter(id__lte=at)
+                elif not self.desc:
+                    results = self.queryset.filter(id__gte=at)
+
+                # Adjust the sort order if we're stepping through reverse
                 if self.sorted:
-                    results = results.order_by('id')
-                results = results.iterator(**extra_kwargs)
+                    if self.desc:
+                        results = results.order_by('-id')
+                    else:
+                        results = results.order_by('id')
+
+                if self.max_id:
+                    results = results.filter(id__lte=max_id)
+
+                results = results[:self.step].iterator(**extra_kwargs)
                 if self.select_related:
                     # we have to pull them all into memory to do the select_related
                     results = list(results)
@@ -168,9 +188,23 @@ class RangeQuerySetWrapper(object):
                             related = []
                         attach_foreignkey(results, getattr(self.queryset.model, fkey, related))
 
+                if self.callbacks:
+                    results = list(results)
+                    for callback in self.callbacks:
+                        callback(results)
+
                 for result in results:
                     yield result
                     num += 1
-                    if num >= limit:
+                    at = result.id
+                    if (max_id and result.id >= max_id) or (limit and num >= limit):
                         break
-                at += self.step
+
+                if at is None:
+                    break
+
+                has_results = num > start
+                if self.desc:
+                    at -= 1
+                else:
+                    at += 1

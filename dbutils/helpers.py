@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+
 def queryset_to_dict(qs, key='pk', singular=True):
     """
     Given a queryset will transform it into a dictionary based on ``key``.
@@ -14,6 +15,7 @@ def queryset_to_dict(qs, key='pk', singular=True):
             result[getattr(u, key)].append(u)
     return result
 
+
 def distinct(l):
     """
     Given an iterable will return a list of all distinct values.
@@ -22,6 +24,8 @@ def distinct(l):
 
 
 from django.db.models.fields.related import SingleRelatedObjectDescriptor
+
+
 def attach_foreignkey(objects, field, related=[], database='default'):
     """
     Shortcut method which handles a pythonic LEFT OUTER JOIN.
@@ -61,6 +65,7 @@ def attach_foreignkey(objects, field, related=[], database='default'):
     for o in objects:
         setattr(o, accessor, queryset.get(getattr(o, column)))
 
+
 def attach_foreignkeys(*object_sets, **kwargs):
     """
     Shortcut method which handles a pythonic LEFT OUTER JOIN. Allows you to attach the same object type
@@ -70,7 +75,7 @@ def attach_foreignkeys(*object_sets, **kwargs):
 
     Works with only ForeignKeys
     """
-    
+
     related = kwargs.get('related', [])
     database = kwargs.get('database', 'default')
 

@@ -5,9 +5,11 @@ from django.db.models import Min, Max
 
 from dbutils.helpers import attach_foreignkey
 
+
 class QuerySetDoubleIteration(Exception):
     "A QuerySet was iterated over twice, you probably want to list() it."
     pass
+
 
 # "Skinny" here means we use iterator by default, rather than
 # ballooning in memory.
@@ -41,7 +43,9 @@ class SkinnyQuerySet(QuerySet):
         return list(self)
 
 
-class InvalidQuerySetError(ValueError): pass
+class InvalidQuerySetError(ValueError):
+    pass
+
 
 class IterableQuerySetWrapper(object):
     """
@@ -60,20 +64,16 @@ class IterableQuerySetWrapper(object):
     def __iter__(self):
         at = 0
 
-        if isinstance(self.queryset, RangeQuerySet):
-            extra_kwargs = {'bypass': True}
-        else:
-            extra_kwargs = {}
-
-        results = list(self.queryset[at:at+self.step])
+        results = list(self.queryset[at:(at + self.step)])
         while results and (not self.limit or at < self.limit):
             for result in results:
                 yield result
             at += self.step
-            results = list(self.queryset[at:at+self.step])
+            results = list(self.queryset[at:(at + self.step)])
 
     def iterator(self):
         return iter(self)
+
 
 class RangeQuerySet(SkinnyQuerySet):
     """
@@ -98,6 +98,7 @@ class RangeQuerySet(SkinnyQuerySet):
             results = super(RangeQuerySet, self).iterator()
         for result in results:
             yield result
+
 
 class RangeQuerySetWrapper(object):
     """
@@ -153,7 +154,7 @@ class RangeQuerySetWrapper(object):
                 extra_kwargs = {}
 
             while at <= max_id and (not self.limit or num < self.limit):
-                results = self.queryset.filter(id__gte=at, id__lte=min(at+self.step-1, max_id))
+                results = self.queryset.filter(id__gte=at, id__lte=min((at + self.step - 1), max_id))
                 if self.sorted:
                     results = results.order_by('id')
                 results = results.iterator(**extra_kwargs)
